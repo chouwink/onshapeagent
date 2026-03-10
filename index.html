@@ -219,7 +219,7 @@ async function onshape(method, path, body) {
 // ── Tool implementations ───────────────────────────────────────────────────
 const tools = {
   async create_document({ name }) {
-    const doc = await onshape('POST', '/documents', { name, isPublic: false });
+    const doc = await onshape('POST', '/documents', { name, isPublic: true });
     state.docId = doc.id;
     const ws = await onshape('GET', `/documents/d/${doc.id}/workspaces`);
     state.wsId = ws[0].id;
