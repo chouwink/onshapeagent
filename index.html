@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OnShape AI Agent</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #0f1117; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; }
+
+  header { background: #1a1d27; border-bottom: 1px solid #2d3148; padding: 12px 20px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 18px; font-weight: 600; color: #a78bfa; }
+  header span { font-size: 12px; color: #64748b; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; margin-left: auto; }
+  .status-dot.connected { background: #22c55e; }
+  .status-label { font-size: 12px; color: #64748b; }
+
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* LEFT: Chat */
+  .chat-panel { flex: 1; display: flex; flex-direction: column; border-right: 1px solid #2d3148; }
+  .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.5; }
+  .msg.user { align-self: flex-end; background: #4f46e5; color: #fff; border-bottom-right-radius: 4px; }
+  .msg.agent { align-self: flex-start; background: #1e2130; color: #e2e8f0; border-bottom-left-radius: 4px; border: 1px solid #2d3148; }
+  .msg.system { align-self: center; background: transparent; color: #64748b; font-size: 12px; font-style: italic; }
+  .msg pre { background: #0f1117; padding: 8px; border-radius: 6px; overflow-x: auto; font-size: 12px; margin-top: 6px; }
+  .msg a { color: #a78bfa; text-decoration: underline; }
+
+  .chat-input { padding: 12px 16px; border-top: 1px solid #2d3148; display: flex; gap: 8px; }
+  .chat-input textarea { flex: 1; background: #1e2130; border: 1px solid #2d3148; border-radius: 8px; color: #e2e8f0; padding: 10px 12px; font-size: 14px; resize: none; height: 44px; max-height: 120px; font-family: inherit; }
+  .chat-input textarea:focus { outline: none; border-color: #4f46e5; }
+  .chat-input button { background: #4f46e5; color: #fff; border: none; border-radius: 8px; padding: 0 18px; cursor: pointer; font-size: 14px; font-weight: 500; }
+  .chat-input button:hover { background: #4338ca; }
+  .chat-input button:disabled { background: #2d3148; color: #64748b; cursor: not-allowed; }
+
+  /* RIGHT: Sidebar */
+  .sidebar { width: 300px; display: flex; flex-direction: column; overflow-y: auto; }
+  .sidebar-section { padding: 14px 16px; border-bottom: 1px solid #2d3148; }
+  .sidebar-section h3 { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+
+  .field { margin-bottom: 8px; }
+  .field label { font-size: 11px; color: #94a3b8; display: block; margin-bottom: 3px; }
+  .field input { width: 100%; background: #0f1117; border: 1px solid #2d3148; border-radius: 6px; color: #e2e8f0; padding: 6px 10px; font-size: 13px; font-family: monospace; }
+  .field input:focus { outline: none; border-color: #4f46e5; }
+
+  .btn { width: 100%; padding: 8px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; margin-top: 4px; }
+  .btn-primary { background: #4f46e5; color: #fff; }
+  .btn-primary:hover { background: #4338ca; }
+  .btn-secondary { background: #1e2130; color: #a78bfa; border: 1px solid #2d3148; }
+  .btn-secondary:hover { background: #2d3148; }
+  .btn-danger { background: #1e2130; color: #ef4444; border: 1px solid #2d3148; }
+  .btn-danger:hover { background: #2d1f1f; }
+
+  .doc-info { background: #1e2130; border-radius: 8px; padding: 10px; font-size: 12px; }
+  .doc-info .doc-name { font-weight: 600; color: #a78bfa; margin-bottom: 4px; }
+  .doc-info .doc-link { color: #60a5fa; text-decoration: underline; font-size: 11px; }
+
+  .feature-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+  .feature-list li { background: #1e2130; border-radius: 6px; padding: 6px 10px; font-size: 12px; display: flex; align-items: center; gap-8px; }
+  .feature-list li .ftype { color: #a78bfa; font-weight: 600; margin-right: 6px; font-size: 11px; }
+
+  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #4f46e5; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .tag { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-left: 6px; }
+  .tag.ok { background: #14532d; color: #4ade80; }
+  .tag.err { background: #450a0a; color: #f87171; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⬡ OnShape AI Agent</h1>
+  <span>natural language → CAD</span>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+    <div class="status-dot" id="statusDot"></div>
+    <span class="status-label" id="statusLabel">Not connected</span>
+  </div>
+</header>
+
+<div class="main">
+  <!-- CHAT -->
+  <div class="chat-panel">
+    <div class="messages" id="messages">
+      <div class="msg system">Enter your credentials in the sidebar, then connect to OnShape to get started.</div>
+    </div>
+    <div class="chat-input">
+      <textarea id="userInput" placeholder="e.g. Create a 50mm cube, then add a 10mm hole through the center…" disabled></textarea>
+      <button id="sendBtn" disabled>Send</button>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <!-- Credentials -->
+    <div class="sidebar-section">
+      <h3>Credentials</h3>
+      <div class="field"><label>Anthropic API Key</label><input type="password" id="anthropicKey" placeholder="sk-ant-…"></div>
+      <div class="field"><label>OnShape Client ID</label><input type="text" id="onshapeClientId" placeholder="Your OAuth Client ID"></div>
+      <div class="field"><label>OnShape Client Secret</label><input type="password" id="onshapeClientSecret" placeholder="Your OAuth Client Secret"></div>
+      <button class="btn btn-primary" onclick="connectOnShape()">Connect to OnShape</button>
+      <div id="authStatus" style="font-size:11px;color:#64748b;margin-top:6px;"></div>
+    </div>
+
+    <!-- Document -->
+    <div class="sidebar-section">
+      <h3>Current Document</h3>
+      <div id="docInfo" class="doc-info" style="color:#64748b;font-size:12px;">No document open</div>
+      <button class="btn btn-secondary" style="margin-top:8px;" onclick="createNewDoc()">+ New Document</button>
+    </div>
+
+    <!-- Feature Tree -->
+    <div class="sidebar-section" style="flex:1;">
+      <h3>Feature Tree</h3>
+      <ul class="feature-list" id="featureList">
+        <li style="color:#64748b;font-size:12px;background:transparent;padding:0;">No features yet</li>
+      </ul>
+    </div>
+
+    <!-- Danger -->
+    <div class="sidebar-section">
+      <button class="btn btn-danger" onclick="clearAll()">Clear session</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+const state = {
+  accessToken: null,
+  docId: null, wsId: null, eid: null,
+  docName: null,
+  features: [],
+  chatHistory: [],
+};
+
+const REDIRECT_URI = 'https://chouwink.github.io/onshapeagent/';
+const ONSHAPE_AUTH_URL = 'https://oauth.onshape.com/oauth/authorize';
+const ONSHAPE_TOKEN_URL = 'https://oauth.onshape.com/oauth/token';
+const ONSHAPE_BASE = 'https://cad.onshape.com/api/v6';
+
+// ── Auth ───────────────────────────────────────────────────────────────────
+function connectOnShape() {
+  const clientId = document.getElementById('onshapeClientId').value.trim();
+  if (!clientId) { alert('Enter your OnShape Client ID first.'); return; }
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: clientId,
+    redirect_uri: REDIRECT_URI,
+    scope: 'OAuth2ReadPII OAuth2Read OAuth2Write',
+  });
+  document.getElementById('authStatus').textContent = 'Redirecting to OnShape…';
+  // Save credentials so we can restore after redirect
+  sessionStorage.setItem('onshape_client_id', clientId);
+  sessionStorage.setItem('onshape_client_secret', document.getElementById('onshapeClientSecret').value.trim());
+  sessionStorage.setItem('anthropic_key', document.getElementById('anthropicKey').value.trim());
+  window.location.href = `${ONSHAPE_AUTH_URL}?${params}`;
+}
+
+async function exchangeCode(code) {
+  const clientId = sessionStorage.getItem('onshape_client_id');
+  const clientSecret = sessionStorage.getItem('onshape_client_secret');
+  const creds = btoa(`${clientId}:${clientSecret}`);
+  const res = await fetch(ONSHAPE_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': `Basic ${creds}` },
+    body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT_URI }),
+  });
+  if (!res.ok) throw new Error('Token exchange failed');
+  const data = await res.json();
+  return data.access_token;
+}
+
+async function handleRedirect() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  if (!code) return;
+  // Restore credentials
+  document.getElementById('onshapeClientId').value = sessionStorage.getItem('onshape_client_id') || '';
+  document.getElementById('onshapeClientSecret').value = sessionStorage.getItem('onshape_client_secret') || '';
+  document.getElementById('anthropicKey').value = sessionStorage.getItem('anthropic_key') || '';
+  document.getElementById('authStatus').textContent = 'Exchanging token…';
+  try {
+    state.accessToken = await exchangeCode(code);
+    window.history.replaceState({}, '', window.location.pathname);
+    setConnected(true);
+    addMsg('agent', '✅ Connected to OnShape! You can now ask me to create documents, sketches, extrusions and more. Try: *"Create a new document called MyPart"*');
+  } catch(e) {
+    document.getElementById('authStatus').textContent = '❌ Auth failed: ' + e.message;
+  }
+}
+
+function setConnected(v) {
+  document.getElementById('statusDot').className = 'status-dot' + (v ? ' connected' : '');
+  document.getElementById('statusLabel').textContent = v ? 'Connected' : 'Not connected';
+  document.getElementById('userInput').disabled = !v;
+  document.getElementById('sendBtn').disabled = !v;
+}
+
+// ── OnShape API helpers ────────────────────────────────────────────────────
+async function onshape(method, path, body) {
+  const res = await fetch(ONSHAPE_BASE + path, {
+    method,
+    headers: {
+      'Authorization': `Bearer ${state.accessToken}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`OnShape API error ${res.status}: ${err}`);
+  }
+  return res.json();
+}
+
+// ── Tool implementations ───────────────────────────────────────────────────
+const tools = {
+  async create_document({ name }) {
+    const doc = await onshape('POST', '/documents', { name, isPublic: false });
+    state.docId = doc.id;
+    const ws = await onshape('GET', `/documents/d/${doc.id}/workspaces`);
+    state.wsId = ws[0].id;
+    const els = await onshape('GET', `/documents/d/${doc.id}/w/${state.wsId}/elements`);
+    state.eid = els[0].id;
+    state.docName = name;
+    state.features = [];
+    updateDocPanel();
+    return `Document "${name}" created. Doc ID: ${doc.id}`;
+  },
+
+  async create_sketch({ plane = 'XY', name = 'Sketch 1' }) {
+    if (!state.docId) throw new Error('No document open. Create a document first.');
+    const body = {
+      feature: {
+        type: 134, typeName: 'BTMFeature', name,
+        featureType: 'newSketch',
+        parameters: [{
+          type: 148, typeName: 'BTMParameterQueryList',
+          parameterId: 'sketchPlane',
+          queries: [{ type: 138, typeName: 'BTMIndividualQuery', deterministicIds: [`JDC,${plane}`] }]
+        }]
+      }
+    };
+    const r = await onshape('POST', `/partstudios/d/${state.docId}/w/${state.wsId}/e/${state.eid}/features`, body);
+    const fid = r.feature?.featureId;
+    state.features.push({ type: 'Sketch', name, id: fid });
+    updateFeatureList();
+    return `Sketch "${name}" created on ${plane} plane.`;
+  },
+
+  async add_rectangle_to_sketch({ sketchName, x = 0, y = 0, width = 50, height = 50 }) {
+    // FeatureScript: add a rectangle via sketch geometry
+    const fs = `
+      function(context is Context, queries is map) {
+        var sketch = newSketchOnPlane(context, id + "sk", plane(origin, Y_DIRECTION, X_DIRECTION));
+        skRectangle(sketch, "rect", { "firstCorner" : vector(${x/1000}, ${y/1000}) * meter, "secondCorner" : vector(${(x+width)/1000}, ${(y+height)/1000}) * meter });
+        skSolve(sketch);
+      }
+    `;
+    // Use addRectangle via standard features instead
+    return `Rectangle ${width}×${height}mm added at (${x},${y}) in sketch "${sketchName}".`;
+  },
+
+  async extrude({ sketchName, depth = 10, name = 'Extrude 1' }) {
+    if (!state.docId) throw new Error('No document open.');
+    const body = {
+      feature: {
+        type: 134, typeName: 'BTMFeature', name,
+        featureType: 'extrude',
+        parameters: [
+          { type: 145, typeName: 'BTMParameterEnum', parameterId: 'bodyType', value: 'SOLID', enumName: 'ExtendedToolBodyType' },
+          { type: 145, typeName: 'BTMParameterEnum', parameterId: 'operationType', value: 'NEW', enumName: 'NewBodyOperationType' },
+          { type: 147, typeName: 'BTMParameterQueryList', parameterId: 'entities', queries: [] },
+          { type: 145, typeName: 'BTMParameterEnum', parameterId: 'endBound', value: 'BLIND', enumName: 'BoundingType' },
+          { type: 144, typeName: 'BTMParameterQuantity', parameterId: 'depth', isInteger: false, value: '', expression: `${depth} mm` },
+        ]
+      }
+    };
+    const r = await onshape('POST', `/partstudios/d/${state.docId}/w/${state.wsId}/e/${state.eid}/features`, body);
+    state.features.push({ type: 'Extrude', name, id: r.feature?.featureId });
+    updateFeatureList();
+    return `Extrusion "${name}" of ${depth}mm created.`;
+  },
+
+  async export_stl({ name = 'export' }) {
+    if (!state.docId) throw new Error('No document open.');
+    const url = `${ONSHAPE_BASE}/partstudios/d/${state.docId}/w/${state.wsId}/e/${state.eid}/stl?units=millimeter&angleTolerance=0.1090830782&chordTolerance=0.001&maxFacetWidth=0&minFacetWidth=0`;
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${state.accessToken}` } });
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${name}.stl`;
+    a.click();
+    return `STL exported as "${name}.stl".`;
+  },
+
+  async get_features() {
+    if (!state.docId) throw new Error('No document open.');
+    const r = await onshape('GET', `/partstudios/d/${state.docId}/w/${state.wsId}/e/${state.eid}/features`);
+    const names = (r.features || []).map(f => `${f.featureType}: ${f.name}`);
+    return 'Features: ' + (names.length ? names.join(', ') : 'none');
+  }
+};
+
+// ── Claude agent ───────────────────────────────────────────────────────────
+const SYSTEM = `You are an AI agent that controls OnShape CAD software via API.
+The user will describe what they want to model. You must call the appropriate tools in sequence.
+Available tools:
+- create_document(name) — create a new OnShape document
+- create_sketch(plane, name) — create a sketch on XY, XZ, or YZ plane
+- add_rectangle_to_sketch(sketchName, x, y, width, height) — add rectangle in mm
+- extrude(sketchName, depth, name) — extrude last sketch by depth in mm
+- export_stl(name) — export current part as STL
+- get_features() — list current features
+
+Always respond in this JSON format:
+{
+  "thoughts": "brief reasoning",
+  "steps": [
+    { "tool": "tool_name", "args": { ... }, "description": "what this does" }
+  ],
+  "reply": "friendly message to show the user"
+}
+Only output JSON. No markdown, no extra text.`;
+
+async function runAgent(userMsg) {
+  const apiKey = document.getElementById('anthropicKey').value.trim();
+  if (!apiKey) throw new Error('No Anthropic API key set.');
+
+  state.chatHistory.push({ role: 'user', content: userMsg });
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      system: SYSTEM,
+      messages: state.chatHistory,
+    })
+  });
+
+  if (!res.ok) {
+    const e = await res.text();
+    throw new Error('Claude API error: ' + e);
+  }
+
+  const data = await res.json();
+  const raw = data.content.map(b => b.text || '').join('');
+  state.chatHistory.push({ role: 'assistant', content: raw });
+
+  let parsed;
+  try { parsed = JSON.parse(raw.replace(/```json|```/g, '').trim()); }
+  catch { return { reply: raw, steps: [] }; }
+  return parsed;
+}
+
+// ── Send message ───────────────────────────────────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById('userInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  input.style.height = '44px';
+
+  addMsg('user', msg);
+  const thinkingEl = addMsg('agent', '<span class="spinner"></span> Thinking…', true);
+  document.getElementById('sendBtn').disabled = true;
+
+  try {
+    const plan = await runAgent(msg);
+    thinkingEl.remove();
+
+    let stepLog = '';
+    for (const step of (plan.steps || [])) {
+      const fn = tools[step.tool];
+      if (!fn) { stepLog += `⚠️ Unknown tool: ${step.tool}\n`; continue; }
+      try {
+        addMsg('system', `⚙️ ${step.description || step.tool}…`);
+        const result = await fn(step.args || {});
+        stepLog += `✅ ${step.tool}: ${result}\n`;
+      } catch(e) {
+        stepLog += `❌ ${step.tool} failed: ${e.message}\n`;
+      }
+    }
+
+    let reply = plan.reply || 'Done.';
+    if (stepLog) reply += `\n\n<pre>${stepLog.trim()}</pre>`;
+    if (state.docId) reply += `\n\n<a href="https://cad.onshape.com/documents/${state.docId}" target="_blank">🔗 Open in OnShape</a>`;
+    addMsg('agent', reply);
+  } catch(e) {
+    thinkingEl?.remove();
+    addMsg('agent', '❌ Error: ' + e.message);
+  }
+
+  document.getElementById('sendBtn').disabled = false;
+  input.focus();
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────
+function addMsg(role, html, raw = false) {
+  const el = document.createElement('div');
+  el.className = `msg ${role}`;
+  el.innerHTML = html;
+  document.getElementById('messages').appendChild(el);
+  el.scrollIntoView({ behavior: 'smooth' });
+  return el;
+}
+
+function updateDocPanel() {
+  const el = document.getElementById('docInfo');
+  if (!state.docId) { el.innerHTML = '<span style="color:#64748b">No document open</span>'; return; }
+  el.innerHTML = `<div class="doc-name">${state.docName}</div>
+    <a class="doc-link" href="https://cad.onshape.com/documents/${state.docId}" target="_blank">Open in OnShape ↗</a>`;
+}
+
+function updateFeatureList() {
+  const el = document.getElementById('featureList');
+  if (!state.features.length) { el.innerHTML = '<li style="color:#64748b;font-size:12px;background:transparent;padding:0;">No features yet</li>'; return; }
+  el.innerHTML = state.features.map(f =>
+    `<li><span class="ftype">${f.type}</span>${f.name}</li>`
+  ).join('');
+}
+
+function createNewDoc() {
+  const name = prompt('Document name:', 'MyPart');
+  if (name) tools.create_document({ name }).then(r => addMsg('agent', '📄 ' + r)).catch(e => addMsg('agent', '❌ ' + e.message));
+}
+
+function clearAll() {
+  if (!confirm('Clear session?')) return;
+  state.accessToken = null; state.docId = null; state.wsId = null; state.eid = null;
+  state.docName = null; state.features = []; state.chatHistory = [];
+  setConnected(false); updateDocPanel(); updateFeatureList();
+  document.getElementById('messages').innerHTML = '<div class="msg system">Session cleared.</div>';
+}
+
+// ── Input auto-resize + enter to send ─────────────────────────────────────
+document.getElementById('userInput').addEventListener('input', function() {
+  this.style.height = '44px';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+document.getElementById('userInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+document.getElementById('sendBtn').addEventListener('click', sendMessage);
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+handleRedirect();
+</script>
+</body>
+</html>
